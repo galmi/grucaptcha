@@ -3,6 +3,7 @@ package grucaptcha
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -27,6 +28,15 @@ const SOCKS5 ProxyType = "SOCKS5"
 type ReCaptchaV2Params struct {
 	Method    string    //userrecaptcha - defines that you're sending a ReCaptcha V2 with new method
 	GoogleKey string    //Value of k or data-sitekey parameter you found on page
+	PageUrl   string    //Full URL of the page where you see the ReCaptcha
+	Invisible int       //1 - means that ReCaptcha is invisible. 0 - normal ReCaptcha. Default - 0
+	Proxy     string    //Format: login:password@123.123.123.123:3128
+	ProxyType ProxyType //Type of your proxy: HTTP, HTTPS, SOCKS4, SOCKS5.
+}
+type ReCaptchaV3Params struct {
+	Method    string    //userrecaptcha - defines that you're sending a ReCaptcha V3 with new method
+	GoogleKey string    //Value of k or data-sitekey parameter you found on page
+	MinScore  float64   //
 	PageUrl   string    //Full URL of the page where you see the ReCaptcha
 	Invisible int       //1 - means that ReCaptcha is invisible. 0 - normal ReCaptcha. Default - 0
 	Proxy     string    //Format: login:password@123.123.123.123:3128
@@ -125,6 +135,59 @@ func (r *RuCaptcha) ResolveReCaptchaV2(params ReCaptchaV2Params) (chan RuCaptcha
 	requestParams["googlekey"] = params.GoogleKey
 	requestParams["pageurl"] = params.PageUrl
 	requestParams["invisible"] = strconv.Itoa(params.Invisible)
+	if params.Proxy != "" && params.ProxyType != "" {
+		requestParams["proxy"] = params.Proxy
+		requestParams["proxytype"] = string(params.ProxyType)
+	}
+
+	jobId, err := r.requestJob(requestParams)
+	if err != nil {
+		return nil, err
+	}
+
+	go func(jobId string) {
+		defer close(respChan)
+		for {
+			time.Sleep(time.Second * 5)
+			jobResult, err := r.checkJob(jobId)
+			if err != nil && err.Error() == "CAPCHA_NOT_READY" {
+				continue
+			}
+			if err != nil {
+				respChan <- RuCaptchaResult{
+					JobId: jobId,
+					Error: err,
+				}
+				break
+			}
+			respChan <- RuCaptchaResult{
+				JobId:  jobId,
+				Result: jobResult,
+			}
+			break
+		}
+	}(jobId)
+
+	return respChan, nil
+}
+func (r *RuCaptcha) ResolveReCaptchaV3(params ReCaptchaV3Params) (chan RuCaptchaResult, error) {
+	respChan := make(chan RuCaptchaResult, 1)
+	requestParams := map[string]string{}
+	if params.GoogleKey == "" {
+		return nil, errors.New("GoogleKey is empty")
+	}
+	if params.PageUrl == "" {
+		return nil, errors.New("PageUrl is empty")
+	}
+
+	if params.Method == "" {
+		params.Method = "userrecaptcha"
+	}
+	requestParams["method"] = params.Method
+	requestParams["googlekey"] = params.GoogleKey
+	requestParams["pageurl"] = params.PageUrl
+	requestParams["version"] = "v3"
+	requestParams["min_score"] = fmt.Sprintf("%.3f", params.MinScore)
 	if params.Proxy != "" && params.ProxyType != "" {
 		requestParams["proxy"] = params.Proxy
 		requestParams["proxytype"] = string(params.ProxyType)
