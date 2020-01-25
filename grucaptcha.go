@@ -36,6 +36,7 @@ type ReCaptchaV2Params struct {
 type ReCaptchaV3Params struct {
 	Method    string    //userrecaptcha - defines that you're sending a ReCaptcha V3 with new method
 	GoogleKey string    //Value of k or data-sitekey parameter you found on page
+	Action    string    //Action from js on pageurl
 	MinScore  float64   //
 	PageUrl   string    //Full URL of the page where you see the ReCaptcha
 	Invisible int       //1 - means that ReCaptcha is invisible. 0 - normal ReCaptcha. Default - 0
@@ -186,6 +187,7 @@ func (r *RuCaptcha) ResolveReCaptchaV3(params ReCaptchaV3Params) (chan RuCaptcha
 	requestParams["method"] = params.Method
 	requestParams["googlekey"] = params.GoogleKey
 	requestParams["pageurl"] = params.PageUrl
+	requestParams["action"] = params.Action
 	requestParams["version"] = "v3"
 	requestParams["min_score"] = fmt.Sprintf("%.3f", params.MinScore)
 	if params.Proxy != "" && params.ProxyType != "" {
