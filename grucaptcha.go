@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io/ioutil"
 	"net/http"
-	"strconv"
 	"time"
 )
 
@@ -13,8 +12,10 @@ const SOFT_ID = "7563013"
 const SEND_JOB_URL = "https://2captcha.com/in.php"
 const CHECK_JOB_URL = "https://2captcha.com/res.php"
 
-type RuCaptcha struct {
-	key string
+type GoRuCaptcha struct {
+	key       string
+	Proxy     string    //Format: login:password@123.123.123.123:3128
+	ProxyType ProxyType //Type of your proxy: HTTP, HTTPS, SOCKS4, SOCKS5.
 }
 
 type ProxyType string
@@ -24,13 +25,9 @@ const HTTPS ProxyType = "HTTPS"
 const SOCKS4 ProxyType = "SOCKS4"
 const SOCKS5 ProxyType = "SOCKS5"
 
-type ReCaptchaV2Params struct {
-	Method    string    //userrecaptcha - defines that you're sending a ReCaptcha V2 with new method
-	GoogleKey string    //Value of k or data-sitekey parameter you found on page
-	PageUrl   string    //Full URL of the page where you see the ReCaptcha
-	Invisible int       //1 - means that ReCaptcha is invisible. 0 - normal ReCaptcha. Default - 0
-	Proxy     string    //Format: login:password@123.123.123.123:3128
-	ProxyType ProxyType //Type of your proxy: HTTP, HTTPS, SOCKS4, SOCKS5.
+type CaptchaParams struct {
+	Method string //userrecaptcha - defines that you're sending a ReCaptcha V2 with new method
+	Params map[string]string
 }
 
 type RuCaptchaResp struct {
@@ -44,12 +41,12 @@ type RuCaptchaResult struct {
 	Error  error  //Error message
 }
 
-func (r *RuCaptcha) requestJob(params map[string]string) (string, error) {
+func (c *GoRuCaptcha) requestJob(params map[string]string) (string, error) {
 	req, err := http.NewRequest("GET", SEND_JOB_URL, nil)
 	if err != nil {
 		return "", err
 	}
-	params["key"] = r.key
+	params["key"] = c.key
 	params["soft_id"] = SOFT_ID
 	params["json"] = "1"
 	q := req.URL.Query()
@@ -76,14 +73,14 @@ func (r *RuCaptcha) requestJob(params map[string]string) (string, error) {
 	return respData.Request, nil
 }
 
-func (r *RuCaptcha) checkJob(jobId string) (string, error) {
+func (c *GoRuCaptcha) checkJob(jobId string) (string, error) {
 	req, err := http.NewRequest("GET", CHECK_JOB_URL, nil)
 	if err != nil {
 		return "", err
 	}
 
 	q := req.URL.Query()
-	q.Add("key", r.key)
+	q.Add("key", c.key)
 	q.Add("soft_id", SOFT_ID)
 	q.Add("json", "1")
 	q.Add("action", "get")
@@ -108,29 +105,23 @@ func (r *RuCaptcha) checkJob(jobId string) (string, error) {
 	return respData.Request, nil
 }
 
-func (r *RuCaptcha) ResolveReCaptchaV2(params ReCaptchaV2Params) (chan RuCaptchaResult, error) {
+func (c *GoRuCaptcha) resolveCaptcha(params CaptchaParams) (chan RuCaptchaResult, error) {
 	respChan := make(chan RuCaptchaResult, 1)
 	requestParams := map[string]string{}
-	if params.GoogleKey == "" {
-		return nil, errors.New("GoogleKey is empty")
-	}
-	if params.PageUrl == "" {
-		return nil, errors.New("PageUrl is empty")
-	}
-
 	if params.Method == "" {
-		params.Method = "userrecaptcha"
+		return nil, errors.New("Unknown captcha type")
 	}
 	requestParams["method"] = params.Method
-	requestParams["googlekey"] = params.GoogleKey
-	requestParams["pageurl"] = params.PageUrl
-	requestParams["invisible"] = strconv.Itoa(params.Invisible)
-	if params.Proxy != "" && params.ProxyType != "" {
-		requestParams["proxy"] = params.Proxy
-		requestParams["proxytype"] = string(params.ProxyType)
+	if c.Proxy != "" && c.ProxyType != "" {
+		requestParams["proxy"] = c.Proxy
+		requestParams["proxytype"] = string(c.ProxyType)
 	}
 
-	jobId, err := r.requestJob(requestParams)
+	for param, value := range params.Params {
+		requestParams[param] = value
+	}
+
+	jobId, err := c.requestJob(requestParams)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +130,7 @@ func (r *RuCaptcha) ResolveReCaptchaV2(params ReCaptchaV2Params) (chan RuCaptcha
 		defer close(respChan)
 		for {
 			time.Sleep(time.Second * 5)
-			jobResult, err := r.checkJob(jobId)
+			jobResult, err := c.checkJob(jobId)
 			if err != nil && err.Error() == "CAPCHA_NOT_READY" {
 				continue
 			}
@@ -159,10 +150,4 @@ func (r *RuCaptcha) ResolveReCaptchaV2(params ReCaptchaV2Params) (chan RuCaptcha
 	}(jobId)
 
 	return respChan, nil
-}
-
-func NewRucaptcha(key string) RuCaptcha {
-	return RuCaptcha{
-		key: key,
-	}
 }
