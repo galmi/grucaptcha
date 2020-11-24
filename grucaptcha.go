@@ -32,19 +32,19 @@ type CaptchaParams struct {
 
 type RuCaptchaResp struct {
 	Status  int
-	Request string
+	Request interface{}
 }
 
 type RuCaptchaResult struct {
-	JobId  string //Job ID
-	Result string //Result string
-	Error  error  //Error message
+	JobId  string      //Job ID
+	Result interface{} //Result string
+	Error  error       //Error message
 }
 
-func (c *GoRuCaptcha) requestJob(params map[string]string) (string, error) {
+func (c *GoRuCaptcha) requestJob(params map[string]string) (interface{}, error) {
 	req, err := http.NewRequest("GET", SEND_JOB_URL, nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	params["key"] = c.key
 	params["soft_id"] = SOFT_ID
@@ -57,26 +57,26 @@ func (c *GoRuCaptcha) requestJob(params map[string]string) (string, error) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	body, _ := ioutil.ReadAll(resp.Body)
 	respData := RuCaptchaResp{}
 	err = json.Unmarshal(body, &respData)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if respData.Status == 0 {
-		return "", errors.New(respData.Request)
+		return nil, errors.New(respData.Request.(string))
 	}
 
 	return respData.Request, nil
 }
 
-func (c *GoRuCaptcha) checkJob(jobId string) (string, error) {
+func (c *GoRuCaptcha) checkJob(jobId string) (interface{}, error) {
 	req, err := http.NewRequest("GET", CHECK_JOB_URL, nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	q := req.URL.Query()
@@ -89,17 +89,17 @@ func (c *GoRuCaptcha) checkJob(jobId string) (string, error) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	body, _ := ioutil.ReadAll(resp.Body)
 	respData := RuCaptchaResp{}
 	err = json.Unmarshal(body, &respData)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if respData.Status == 0 {
-		return "", errors.New(respData.Request)
+		return nil, errors.New(respData.Request.(string))
 	}
 
 	return respData.Request, nil
@@ -147,7 +147,7 @@ func (c *GoRuCaptcha) resolveCaptcha(params CaptchaParams) (chan RuCaptchaResult
 			}
 			break
 		}
-	}(jobId)
+	}(jobId.(string))
 
 	return respChan, nil
 }

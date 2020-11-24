@@ -13,7 +13,13 @@ type HCaptchaParams struct {
 	PageUrl string
 }
 
-func (h *HCaptcha) Resolve(params HCaptchaParams) (chan RuCaptchaResult, error) {
+type HcaptchaResult struct {
+	JobId  string //Job ID
+	Result string //Result string
+	Error  error  //Error message
+}
+
+func (h *HCaptcha) Resolve(params HCaptchaParams) (chan HcaptchaResult, error) {
 	requestParams := map[string]string{}
 	if params.SiteKey == "" {
 		return nil, errors.New("Sitekey is empty")
@@ -29,7 +35,22 @@ func (h *HCaptcha) Resolve(params HCaptchaParams) (chan RuCaptchaResult, error) 
 		Params: requestParams,
 	}
 
-	return h.resolveCaptcha(captchaParams)
+	resChan := make(chan HcaptchaResult, 1)
+
+	ch, err := h.resolveCaptcha(captchaParams)
+	if err == nil {
+		go func() {
+			for msg := range ch {
+				result := HcaptchaResult{
+					JobId:  msg.JobId,
+					Result: msg.Result.(string),
+					Error:  msg.Error,
+				}
+				resChan <- result
+			}
+		}()
+	}
+	return resChan, err
 }
 
 func NewHcaptcha(key string) HCaptcha {
