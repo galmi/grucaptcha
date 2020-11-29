@@ -1,11 +1,13 @@
 package grucaptcha
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 )
@@ -55,6 +57,31 @@ type RuCaptchaResult struct {
 	Error  error  //Error message
 }
 
+func (r *RuCaptcha) requestJobPost(bodyBase64 string) (string, error) {
+	data := url.Values{}
+	data.Add("method", "base64")
+	data.Add("body", bodyBase64)
+	data.Add("key", r.key)
+	data.Add("json", "1")
+	data.Add("soft_id", SOFT_ID)
+
+	resp, err := http.PostForm(SEND_JOB_URL, data)
+	if err != nil {
+		return "", err
+	}
+	body, _ := ioutil.ReadAll(resp.Body)
+	respData := RuCaptchaResp{}
+	err = json.Unmarshal(body, &respData)
+	if err != nil {
+		return "", err
+	}
+
+	if respData.Status == 0 {
+		return "", errors.New(respData.Request)
+	}
+
+	return respData.Request, nil
+}
 func (r *RuCaptcha) requestJob(params map[string]string) (string, error) {
 	req, err := http.NewRequest("GET", SEND_JOB_URL, nil)
 	if err != nil {
@@ -117,6 +144,41 @@ func (r *RuCaptcha) checkJob(jobId string) (string, error) {
 	}
 
 	return respData.Request, nil
+}
+
+func (r *RuCaptcha) ResolveImage(imageBytes []byte) (chan RuCaptchaResult, error) {
+	respChan := make(chan RuCaptchaResult, 1)
+
+	toString := base64.StdEncoding.EncodeToString(imageBytes)
+	jobId, err := r.requestJobPost(toString)
+	if err != nil {
+		return nil, err
+	}
+
+	go func(jobId string) {
+		defer close(respChan)
+		for {
+			time.Sleep(time.Second * 5)
+			jobResult, err := r.checkJob(jobId)
+			if err != nil && err.Error() == "CAPCHA_NOT_READY" {
+				continue
+			}
+			if err != nil {
+				respChan <- RuCaptchaResult{
+					JobId: jobId,
+					Error: err,
+				}
+				break
+			}
+			respChan <- RuCaptchaResult{
+				JobId:  jobId,
+				Result: jobResult,
+			}
+			break
+		}
+	}(jobId)
+
+	return respChan, nil
 }
 
 func (r *RuCaptcha) ResolveReCaptchaV2(params ReCaptchaV2Params) (chan RuCaptchaResult, error) {
