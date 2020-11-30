@@ -9,12 +9,15 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
 const SOFT_ID = "7563013"
 const SEND_JOB_URL = "https://2captcha.com/in.php"
 const CHECK_JOB_URL = "https://2captcha.com/res.php"
+const SEND_JOB_URL2 = "http://88.99.141.20/in.php"
+const CHECK_JOB_URL2 = "http://88.99.141.20/res.php"
 
 type RuCaptcha struct {
 	key string
@@ -48,6 +51,7 @@ type ReCaptchaV3Params struct {
 
 type RuCaptchaResp struct {
 	Status  int
+	Info    string
 	Request string
 }
 
@@ -63,9 +67,8 @@ func (r *RuCaptcha) requestJobPost(bodyBase64 string) (string, error) {
 	data.Add("body", bodyBase64)
 	data.Add("key", r.key)
 	data.Add("json", "1")
-	data.Add("soft_id", SOFT_ID)
 
-	resp, err := http.PostForm(SEND_JOB_URL, data)
+	resp, err := http.PostForm(SEND_JOB_URL2, data)
 	if err != nil {
 		return "", err
 	}
@@ -115,7 +118,7 @@ func (r *RuCaptcha) requestJob(params map[string]string) (string, error) {
 }
 
 func (r *RuCaptcha) checkJob(jobId string) (string, error) {
-	req, err := http.NewRequest("GET", CHECK_JOB_URL, nil)
+	req, err := http.NewRequest("GET", CHECK_JOB_URL2, nil)
 	if err != nil {
 		return "", err
 	}
@@ -136,6 +139,14 @@ func (r *RuCaptcha) checkJob(jobId string) (string, error) {
 	respData := RuCaptchaResp{}
 	err = json.Unmarshal(body, &respData)
 	if err != nil {
+		if strings.Contains(string(body), "|") {
+			parts := strings.Split(string(body), "|")
+			respData.Info = parts[0]
+			if len(parts) > 1 {
+				respData.Request = parts[1]
+			}
+			return respData.Request, nil
+		}
 		return "", err
 	}
 
@@ -158,7 +169,7 @@ func (r *RuCaptcha) ResolveImage(imageBytes []byte) (chan RuCaptchaResult, error
 	go func(jobId string) {
 		defer close(respChan)
 		for {
-			time.Sleep(time.Second * 5)
+			time.Sleep(time.Second / 2)
 			jobResult, err := r.checkJob(jobId)
 			if err != nil && err.Error() == "CAPCHA_NOT_READY" {
 				continue
