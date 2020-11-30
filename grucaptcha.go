@@ -169,9 +169,9 @@ func (r *RuCaptcha) ResolveImage(imageBytes []byte) (chan RuCaptchaResult, error
 	go func(jobId string) {
 		defer close(respChan)
 		for {
-			time.Sleep(time.Second / 2)
 			jobResult, err := r.checkJob(jobId)
 			if err != nil && err.Error() == "CAPCHA_NOT_READY" {
+				time.Sleep(time.Second / 2)
 				continue
 			}
 			if err != nil {
