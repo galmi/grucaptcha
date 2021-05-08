@@ -68,7 +68,7 @@ func (r *RuCaptcha) requestJobPost(bodyBase64 string) (string, error) {
 	data.Add("key", r.key)
 	data.Add("json", "1")
 
-	resp, err := http.PostForm(SEND_JOB_URL2, data)
+	resp, err := http.PostForm(SEND_JOB_URL, data)
 	if err != nil {
 		return "", err
 	}
@@ -118,7 +118,7 @@ func (r *RuCaptcha) requestJob(params map[string]string) (string, error) {
 }
 
 func (r *RuCaptcha) checkJob(jobId string) (string, error) {
-	req, err := http.NewRequest("GET", CHECK_JOB_URL2, nil)
+	req, err := http.NewRequest("GET", CHECK_JOB_URL, nil)
 	if err != nil {
 		return "", err
 	}
