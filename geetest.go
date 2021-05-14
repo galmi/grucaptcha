@@ -57,15 +57,24 @@ func (h *Geetest) Resolve(params GeetestParams) (chan GeetestResult, error) {
 		go func() {
 			for msg := range ch {
 				fmt.Printf("[INFO] Incoming msg %+v\n", msg)
-				resultResult := msg.Result.(map[string]interface{})
-				result := GeetestResult{
-					JobId: msg.JobId,
-					Result: GeetestResultResult{
-						GeetestChallenge: resultResult["geetest_challenge"].(string),
-						GeetestSeccode:   resultResult["geetest_seccode"].(string),
-						GeetestValidate:  resultResult["geetest_validate"].(string),
-					},
-					Error: msg.Error,
+				var result GeetestResult
+				if msg.Result == nil {
+					result = GeetestResult{
+						JobId:  msg.JobId,
+						Result: GeetestResultResult{},
+						Error:  msg.Error,
+					}
+				} else {
+					resultResult := msg.Result.(map[string]interface{})
+					result = GeetestResult{
+						JobId: msg.JobId,
+						Result: GeetestResultResult{
+							GeetestChallenge: resultResult["geetest_challenge"].(string),
+							GeetestSeccode:   resultResult["geetest_seccode"].(string),
+							GeetestValidate:  resultResult["geetest_validate"].(string),
+						},
+						Error: msg.Error,
+					}
 				}
 				resChan <- result
 			}
